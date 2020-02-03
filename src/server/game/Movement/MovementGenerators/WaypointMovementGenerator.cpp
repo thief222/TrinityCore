@@ -27,12 +27,12 @@
 #include "WaypointManager.h"
 
 WaypointMovementGenerator<Creature>::WaypointMovementGenerator(uint32 pathId, bool repeating) : _nextMoveTime(0), _recalculateSpeed(false), _isArrivalDone(false), _pathId(pathId),
-_repeating(repeating), _loadedFromDB(true), _stalled(false), _done(false)
+_repeating(repeating), _loadedFromDB(true), _stalled(false), _done(false), _transitionPointId(0)
 {
 }
 
 WaypointMovementGenerator<Creature>::WaypointMovementGenerator(WaypointPath& path, bool repeating) : _nextMoveTime(0), _recalculateSpeed(false), _isArrivalDone(false), _pathId(0),
-_repeating(repeating), _loadedFromDB(false), _stalled(false), _done(false)
+_repeating(repeating), _loadedFromDB(false), _stalled(false), _done(false), _transitionPointId(0)
 {
     _path = &path;
 }
@@ -202,6 +202,23 @@ void WaypointMovementGenerator<Creature>::StartMove(Creature* creature, bool rel
     if (waypoint.orientation && waypoint.delay)
         init.SetFacing(waypoint.orientation);
 
+    // Setting up our spline transition point at which we launch our next waypoint
+    _transitionPointId = init.Path().size() - 1;
+
+    // Smooth waypoint handling. Picking up the first spline point of the next waypoint path and adding it to our current path
+    if (waypoint.orientation == 0 && !waypoint.delay)
+    {
+        uint32 nextNode = (_currentNode + 1) % _path->nodes.size();
+        if (nextNode < _currentNode && _repeating)
+        {
+            WaypointNode const& nextWaypoint = _path->nodes[nextNode];
+            G3D::Vector3 nextDest = G3D::Vector3(nextWaypoint.x, nextWaypoint.y, nextWaypoint.z);
+            Movement::MoveSplineInit smoothInit(creature);
+            smoothInit.MoveTo(init.Path().back(), nextDest);
+            init.Path().push_back(smoothInit.Path().at(1));
+        }
+    }
+
     switch (waypoint.moveType)
     {
         case WAYPOINT_MOVE_TYPE_LAND:
@@ -243,7 +260,9 @@ bool WaypointMovementGenerator<Creature>::DoUpdate(Creature* creature, uint32 di
     }
 
     // if it's moving
-    if (!creature->movespline->Finalized())
+    bool isMoving = !creature->movespline->Finalized() && creature->movespline->currentPathIdx() != _transitionPointId;
+
+    if (isMoving)
     {
         // set home position at place (every MotionMaster::UpdateMotion)
         if (creature->GetTransGUID().IsEmpty())
