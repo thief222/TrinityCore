@@ -20,6 +20,7 @@
 #include "SpellScript.h"
 #include "CombatAI.h"
 #include "CreatureAIImpl.h"
+#include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
@@ -534,6 +535,162 @@ class spell_westfall_aggro_hobo : public SpellScript
     }
 };
 
+enum BridgeRefugee
+{
+    // Events
+    EVENT_START_MOVE = 1,
+    EVENT_CRIME_SCENE_DRIFTER_TALK_0,
+    EVENT_CRIME_SCENE_TALK_12,
+    EVENT_CRIME_SCENE_DRIFTER_TALK_1,
+    EVENT_CRIME_SCENE_TALK_13,
+    EVENT_CRIME_SCENE_DRIFTER_TALK_2,
+    EVENT_MOVE_TO_SENTINEL_HILL,
+    EVENT_SENTINEL_HILL_GUARD1_TALK_1,
+    EVENT_SENTINEL_HILL_TALK_14,
+    EVENT_SENTINEL_HILL_GUARD2_TALK_2,
+    EVENT_SENTINEL_HILL_GUARD2_TALK_3,
+    EVENT_SENTINEL_HILL_DRIFTER_TALK_3,
+    EVENT_SENTINEL_HILL_TALK_15,
+    EVENT_LEAVE_SENTINEL_HILL,
+
+    // MovePoints
+    POINT_CRIME_SCENE        = 0,
+    POINT_SENTINEL_HILL_GATE = 1,
+    POINT_DESPAWN            = 2,
+
+    // SplineChains
+    SPLINE_CHAIN_ID_CRIME_SCENE         = 1,
+    SPLINE_CHAIN_ID_SENTINEL_HILL       = 2,
+    SPLINE_CHAIN_ID_LEAVE_SENTINEL_HILL = 3,
+
+    // Text
+    SAY_TRANSIENT_11 = 11,
+    SAY_TRANSIENT_12 = 12,
+    SAY_TRANSIENT_13 = 13,
+    SAY_TRANSIENT_14 = 14,
+    SAY_TRANSIENT_15 = 15,
+
+    // DisplayID
+    DISPLAY_HOBO_CART = 32849,
+
+    // CreatureID
+    CREATURE_HOBO_CART = 42399
+};
+
+struct npc_westfall_refugee_bridge_to_sentinelhill : public ScriptedAI
+{
+    npc_westfall_refugee_bridge_to_sentinelhill(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustAppeared() override
+    {
+        _events.ScheduleEvent(EVENT_START_MOVE, 4s);
+    }
+
+    void MovementInform(uint32 type, uint32 pointId) override
+    {
+        if (type != SPLINE_CHAIN_MOTION_TYPE)
+            return;
+
+        switch (pointId)
+        {
+        case POINT_CRIME_SCENE:
+            Talk(SAY_TRANSIENT_11);
+            _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_0, 6s);
+            break;
+        case POINT_SENTINEL_HILL_GATE:
+            // Trigger Guard1 Talk 0
+            _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD1_TALK_1, 4s);
+            //_events.ScheduleEvent(EVENT_LEAVE_SENTINEL_HILL, 42s);
+            break;
+        case POINT_DESPAWN:
+            me->DespawnOrUnsummon();
+            break;
+        default:
+            break;
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_START_MOVE:
+                    me->GetMotionMaster()->MoveAlongSplineChain(POINT_CRIME_SCENE, SPLINE_CHAIN_ID_CRIME_SCENE, true);
+                    break;
+                case EVENT_CRIME_SCENE_DRIFTER_TALK_0:
+                    // Trigger Drifter Talk 0
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_TALK_12, 6s);
+                    break;
+                case EVENT_CRIME_SCENE_TALK_12:
+                    Talk(SAY_TRANSIENT_12);
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_1, 6s);
+                    break;
+                case EVENT_CRIME_SCENE_DRIFTER_TALK_1:
+                    // Trigger Drifter Talk 1
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_TALK_13, 6s);
+                    break;
+                case EVENT_CRIME_SCENE_TALK_13:
+                    Talk(SAY_TRANSIENT_13);
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_2, 5s);
+                    break;
+                case EVENT_CRIME_SCENE_DRIFTER_TALK_2:
+                    // Trigger Drifter Talk 2
+                    _events.ScheduleEvent(EVENT_MOVE_TO_SENTINEL_HILL, 4s);
+                    break;
+                case EVENT_MOVE_TO_SENTINEL_HILL:
+                    me->GetMotionMaster()->MoveAlongSplineChain(POINT_SENTINEL_HILL_GATE, SPLINE_CHAIN_ID_SENTINEL_HILL, true);
+                    break;
+                case EVENT_SENTINEL_HILL_GUARD1_TALK_1:
+                    // Trigger Guard1 Talk 1
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_14, 6s);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_14:
+                    Talk(SAY_TRANSIENT_14);
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_2, 7s);
+                    break;
+                case EVENT_SENTINEL_HILL_GUARD2_TALK_2:
+                    // Trigger Guard2 Talk 2
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_3, 6s);
+                    break;
+                case EVENT_SENTINEL_HILL_GUARD2_TALK_3:
+                    // Trigger Guard2 Talk 3
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_DRIFTER_TALK_3, 9s + 500ms);
+                    break;
+                case EVENT_SENTINEL_HILL_DRIFTER_TALK_3:
+                    // Trigger Drifter Talk 3
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_15, 6s);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_15:
+                    Talk(SAY_TRANSIENT_15);
+                    _events.ScheduleEvent(EVENT_LEAVE_SENTINEL_HILL, 3s + 500ms);
+                    break;
+                case EVENT_LEAVE_SENTINEL_HILL:
+                    me->GetMotionMaster()->MoveAlongSplineChain(POINT_DESPAWN, SPLINE_CHAIN_ID_LEAVE_SENTINEL_HILL, true);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+private:
+    EventMap _events;
+};
+
+struct npc_westfall_hobo_cart : public ScriptedAI
+{
+    npc_westfall_hobo_cart(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustSummoned(Creature* summon)
+    {
+        if (summon->GetEntry() == CREATURE_HOBO_CART)
+            summon->SetDisplayId(DISPLAY_HOBO_CART);
+    }
+};
+
 void AddSC_westfall()
 {
     RegisterSpellScript(spell_westfall_unbound_energy);
@@ -544,4 +701,6 @@ void AddSC_westfall()
     RegisterCreatureAI(npc_westfall_hobo_witness);
     RegisterSpellScript(spell_westfall_summon_ragamuffin_looter);
     RegisterSpellScript(spell_westfall_aggro_hobo);
+    RegisterCreatureAI(npc_westfall_refugee_bridge_to_sentinelhill);
+    RegisterCreatureAI(npc_westfall_hobo_cart);
 }
