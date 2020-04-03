@@ -547,11 +547,23 @@ enum BridgeRefugee
     EVENT_MOVE_TO_SENTINEL_HILL,
     EVENT_SENTINEL_HILL_GUARD1_TALK_1,
     EVENT_SENTINEL_HILL_TALK_14,
+    EVENT_SENTINEL_HILL_TALK_3,
     EVENT_SENTINEL_HILL_GUARD2_TALK_2,
     EVENT_SENTINEL_HILL_GUARD2_TALK_3,
-    EVENT_SENTINEL_HILL_DRIFTER_TALK_3,
+    EVENT_SENTINEL_HILL_TALK_4,
+    EVENT_SENTINEL_HILL_TALK_5,
     EVENT_SENTINEL_HILL_TALK_15,
+    EVENT_SENTINEL_HILL_TALK_16,
     EVENT_LEAVE_SENTINEL_HILL,
+    EVENT_CANCEL,
+
+    // Action
+    ACTION_CRIME_SCENE          = 1,
+    ACTION_SENTINEL_HILL_GATE_1 = 2,
+    ACTION_SENTINEL_HILL_GATE_2 = 3,
+    ACTION_SENTINEL_HILL_TALK_3 = 4,
+    ACTION_SENTINEL_HILL_TALK_4 = 5,
+    ACTION_SENTINEL_HILL_TALK_5 = 6,
 
     // MovePoints
     POINT_CRIME_SCENE        = 0,
@@ -569,13 +581,29 @@ enum BridgeRefugee
     SAY_TRANSIENT_13 = 13,
     SAY_TRANSIENT_14 = 14,
     SAY_TRANSIENT_15 = 15,
+    SAY_TRANSIENT_16 = 16,
+    SAY_WEST_PLAINS_DRIFTER_0 = 0,
+    SAY_WEST_PLAINS_DRIFTER_1 = 1,
+    SAY_WEST_PLAINS_DRIFTER_2 = 2,
+    SAY_WEST_PLAINS_DRIFTER_3 = 3,
+    SAY_WEST_PLAINS_DRIFTER_4 = 4,
+    SAY_WEST_PLAINS_DRIFTER_5 = 5,
+    SAY_SENTINEL_HILL_GUARD_0 = 0,
+    SAY_SENTINEL_HILL_GUARD_1 = 1,
+    SAY_SENTINEL_HILL_GUARD_2 = 2,
+    SAY_SENTINEL_HILL_GUARD_3 = 3,
 
     // DisplayID
     DISPLAY_HOBO_CART = 32849,
 
     // CreatureID
-    CREATURE_HOBO_CART = 42399
+    NPC_HOBO_CART                    = 42399,
+    NPC_WEST_PLAINS_DRIFTER_FOLLOWER = 42400,
+    NPC_SENTINEL_HILL_GUARD          = 42407
 };
+
+Position const SentinelHillGuard1Pos = { -10341.4f, 978.075f, 31.2339f };
+Position const SentinelHillGuard2Pos = { -10341.3f, 981.691f, 31.4328f };
 
 struct npc_westfall_refugee_bridge_to_sentinelhill : public ScriptedAI
 {
@@ -598,12 +626,73 @@ struct npc_westfall_refugee_bridge_to_sentinelhill : public ScriptedAI
             _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_0, 6s);
             break;
         case POINT_SENTINEL_HILL_GATE:
-            // Trigger Guard1 Talk 0
-            _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD1_TALK_1, 4s);
-            //_events.ScheduleEvent(EVENT_LEAVE_SENTINEL_HILL, 42s);
+        {
+            std::vector<Creature*> guardList;
+            Creature* guard1 = NULL;
+            Creature* guard2 = NULL;
+            me->GetCreatureListWithEntryInGrid(guardList, NPC_SENTINEL_HILL_GUARD, 8.f);
+            for (Creature* guard : guardList)
+            {
+                if (guard->GetHomePosition().GetExactDist2d(SentinelHillGuard1Pos) < 0.1f)
+                    guard1 = guard;
+                else if (guard->GetHomePosition().GetExactDist2d(SentinelHillGuard2Pos) < 0.1f)
+                    guard2 = guard;
+
+                if (guard1 && guard2)
+                    break;
+            }
+
+            if (guard1 && guard2 && !guard1->IsInCombat() && !guard2->IsInCombat())
+            {
+                if (guard1->IsAIEnabled)
+                {
+                    guard1->AI()->DoAction(ACTION_SENTINEL_HILL_GATE_1);
+                    guard1->AI()->SetGUID(me->GetGUID(), 0);
+                }
+
+                if (guard2->IsAIEnabled)
+                {
+                    guard2->AI()->DoAction(ACTION_SENTINEL_HILL_GATE_2);
+                    guard2->AI()->SetGUID(me->GetGUID(), 0);
+                }
+
+                Creature* creature = ObjectAccessor::GetCreature(*me, _westPlainsDrifter);
+
+                if (roll_chance_i(50))
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_14, 10s);
+                else
+                {
+                    if (creature)
+                        if (creature->IsAIEnabled)
+                            creature->AI()->DoAction(ACTION_SENTINEL_HILL_TALK_3);
+                }
+
+                if (roll_chance_i(50))
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_15, 32s + 500ms);
+                else
+                {
+                    if (creature)
+                        if (creature->IsAIEnabled)
+                            creature->AI()->DoAction(ACTION_SENTINEL_HILL_TALK_4);
+                }
+
+                if (roll_chance_i(50))
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_15, 38s + 500ms);
+                else
+                {
+                    if (creature)
+                        if (creature->IsAIEnabled)
+                            creature->AI()->DoAction(ACTION_SENTINEL_HILL_TALK_5);
+                }
+
+                _events.ScheduleEvent(EVENT_LEAVE_SENTINEL_HILL, 42s);
+            }
+            else
+                _events.ScheduleEvent(EVENT_CANCEL, 5min);
             break;
+        }
         case POINT_DESPAWN:
-            me->DespawnOrUnsummon();
+            _events.ScheduleEvent(EVENT_CANCEL, 0);
             break;
         default:
             break;
@@ -621,54 +710,107 @@ struct npc_westfall_refugee_bridge_to_sentinelhill : public ScriptedAI
                     me->GetMotionMaster()->MoveAlongSplineChain(POINT_CRIME_SCENE, SPLINE_CHAIN_ID_CRIME_SCENE, true);
                     break;
                 case EVENT_CRIME_SCENE_DRIFTER_TALK_0:
-                    // Trigger Drifter Talk 0
+                    if (Creature* creature = me->FindNearestCreature(NPC_WEST_PLAINS_DRIFTER_FOLLOWER, 5.f))
+                    {
+                        if (creature->IsAIEnabled)
+                            creature->AI()->DoAction(ACTION_CRIME_SCENE);
+                        _westPlainsDrifter = creature->GetGUID();
+                    }
                     _events.ScheduleEvent(EVENT_CRIME_SCENE_TALK_12, 6s);
                     break;
                 case EVENT_CRIME_SCENE_TALK_12:
                     Talk(SAY_TRANSIENT_12);
-                    _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_1, 6s);
-                    break;
-                case EVENT_CRIME_SCENE_DRIFTER_TALK_1:
-                    // Trigger Drifter Talk 1
-                    _events.ScheduleEvent(EVENT_CRIME_SCENE_TALK_13, 6s);
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_TALK_13, 12s);
                     break;
                 case EVENT_CRIME_SCENE_TALK_13:
                     Talk(SAY_TRANSIENT_13);
-                    _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_2, 5s);
-                    break;
-                case EVENT_CRIME_SCENE_DRIFTER_TALK_2:
-                    // Trigger Drifter Talk 2
-                    _events.ScheduleEvent(EVENT_MOVE_TO_SENTINEL_HILL, 4s);
+                    _events.ScheduleEvent(EVENT_MOVE_TO_SENTINEL_HILL, 9s);
                     break;
                 case EVENT_MOVE_TO_SENTINEL_HILL:
                     me->GetMotionMaster()->MoveAlongSplineChain(POINT_SENTINEL_HILL_GATE, SPLINE_CHAIN_ID_SENTINEL_HILL, true);
                     break;
-                case EVENT_SENTINEL_HILL_GUARD1_TALK_1:
-                    // Trigger Guard1 Talk 1
-                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_14, 6s);
-                    break;
                 case EVENT_SENTINEL_HILL_TALK_14:
                     Talk(SAY_TRANSIENT_14);
-                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_2, 7s);
-                    break;
-                case EVENT_SENTINEL_HILL_GUARD2_TALK_2:
-                    // Trigger Guard2 Talk 2
-                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_3, 6s);
-                    break;
-                case EVENT_SENTINEL_HILL_GUARD2_TALK_3:
-                    // Trigger Guard2 Talk 3
-                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_DRIFTER_TALK_3, 9s + 500ms);
-                    break;
-                case EVENT_SENTINEL_HILL_DRIFTER_TALK_3:
-                    // Trigger Drifter Talk 3
-                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_15, 6s);
                     break;
                 case EVENT_SENTINEL_HILL_TALK_15:
                     Talk(SAY_TRANSIENT_15);
-                    _events.ScheduleEvent(EVENT_LEAVE_SENTINEL_HILL, 3s + 500ms);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_16:
+                    Talk(SAY_TRANSIENT_16);
                     break;
                 case EVENT_LEAVE_SENTINEL_HILL:
                     me->GetMotionMaster()->MoveAlongSplineChain(POINT_DESPAWN, SPLINE_CHAIN_ID_LEAVE_SENTINEL_HILL, true);
+                    break;
+                case EVENT_CANCEL:
+                    if (Creature* creature = me->FindNearestCreature(NPC_WEST_PLAINS_DRIFTER_FOLLOWER, 5.f))
+                        creature->DespawnOrUnsummon();
+                    me->DespawnOrUnsummon();
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+private:
+    EventMap _events;
+    ObjectGuid _westPlainsDrifter;
+};
+
+struct npc_westfall_west_plains_drifter : public ScriptedAI
+{
+    npc_westfall_west_plains_drifter(Creature* creature) : ScriptedAI(creature) { }
+
+    void JustSummoned(Creature* summon)
+    {
+        if (summon->GetEntry() == NPC_HOBO_CART)
+            summon->SetDisplayId(DISPLAY_HOBO_CART);
+    }
+
+    void DoAction(int32 action) override
+    {
+        switch (action)
+        {
+            case ACTION_CRIME_SCENE:
+                Talk(SAY_WEST_PLAINS_DRIFTER_0);
+                _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_1, 12s);
+                break;
+            case ACTION_SENTINEL_HILL_TALK_3:
+                _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_3, 10s);
+                break;
+            case ACTION_SENTINEL_HILL_TALK_4:
+                _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_4, 32s + 500ms);
+                break;
+            case ACTION_SENTINEL_HILL_TALK_5:
+                _events.ScheduleEvent(EVENT_SENTINEL_HILL_TALK_5, 38s + 500ms);
+                break;
+            default:
+                return;
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        _events.Update(diff);
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_CRIME_SCENE_DRIFTER_TALK_1:
+                    Talk(SAY_WEST_PLAINS_DRIFTER_1);
+                    _events.ScheduleEvent(EVENT_CRIME_SCENE_DRIFTER_TALK_2, 11s);
+                    break;
+                case EVENT_CRIME_SCENE_DRIFTER_TALK_2:
+                    Talk(SAY_WEST_PLAINS_DRIFTER_2);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_3:
+                    Talk(SAY_WEST_PLAINS_DRIFTER_3);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_4:
+                    Talk(SAY_WEST_PLAINS_DRIFTER_4);
+                    break;
+                case EVENT_SENTINEL_HILL_TALK_5:
+                    Talk(SAY_WEST_PLAINS_DRIFTER_5);
                     break;
                 default:
                     break;
@@ -680,15 +822,62 @@ private:
     EventMap _events;
 };
 
-struct npc_westfall_hobo_cart : public ScriptedAI
+struct npc_westfall_sentinel_hill_guard : public ScriptedAI
 {
-    npc_westfall_hobo_cart(Creature* creature) : ScriptedAI(creature) { }
+    npc_westfall_sentinel_hill_guard(Creature* creature) : ScriptedAI(creature) { }
 
-    void JustSummoned(Creature* summon)
+    void DoAction(int32 action) override
     {
-        if (summon->GetEntry() == CREATURE_HOBO_CART)
-            summon->SetDisplayId(DISPLAY_HOBO_CART);
+        switch (action)
+        {
+            case ACTION_SENTINEL_HILL_GATE_1:
+                Talk(SAY_SENTINEL_HILL_GUARD_0);
+                _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD1_TALK_1, 4s);
+                break;
+            case ACTION_SENTINEL_HILL_GATE_2:
+                _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_2, 17s);
+                break;
+            default:
+                return;
+        }
     }
+
+    void SetGUID(ObjectGuid const& guid, int32 /*id*/) override
+    {
+        _transientGuid = guid;
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        _events.Update(diff);
+        while (uint32 eventId = _events.ExecuteEvent())
+        {
+            switch (eventId)
+            {
+                case EVENT_SENTINEL_HILL_GUARD1_TALK_1:
+                    Talk(SAY_SENTINEL_HILL_GUARD_1);
+                    break;
+                case EVENT_SENTINEL_HILL_GUARD2_TALK_2:
+                    Talk(SAY_SENTINEL_HILL_GUARD_2);
+                    _events.ScheduleEvent(EVENT_SENTINEL_HILL_GUARD2_TALK_3, 6s);
+                    break;
+                case EVENT_SENTINEL_HILL_GUARD2_TALK_3:
+                    Talk(SAY_SENTINEL_HILL_GUARD_3);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    EventMap _events;
+    ObjectGuid _transientGuid;
 };
 
 void AddSC_westfall()
@@ -702,5 +891,6 @@ void AddSC_westfall()
     RegisterSpellScript(spell_westfall_summon_ragamuffin_looter);
     RegisterSpellScript(spell_westfall_aggro_hobo);
     RegisterCreatureAI(npc_westfall_refugee_bridge_to_sentinelhill);
-    RegisterCreatureAI(npc_westfall_hobo_cart);
+    RegisterCreatureAI(npc_westfall_west_plains_drifter);
+    RegisterCreatureAI(npc_westfall_sentinel_hill_guard);
 }

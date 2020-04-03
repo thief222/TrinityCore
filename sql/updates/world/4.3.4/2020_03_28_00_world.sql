@@ -58,7 +58,15 @@ INSERT INTO `script_spline_chain_meta` (`entry`, `chainId`, `splineId`, `expecte
 (42383, 3, 0, 30748, 0);
 
 UPDATE `creature` SET `ScriptName`='npc_westfall_refugee_bridge_to_sentinelhill' WHERE  `guid`=280420;
-UPDATE `creature_template` SET `ScriptName`='npc_westfall_hobo_cart' WHERE  `entry`=42400;
+UPDATE `creature_template` SET `ScriptName`='npc_westfall_west_plains_drifter' WHERE  `entry`=42400;
+
+DELETE FROM `linked_respawn` WHERE `guid` = 280419; 
+INSERT INTO `linked_respawn` (`guid`, `linkedGuid`) VALUES (280419, 280420);
+
+DELETE FROM `creature_formations` WHERE `leaderGUID` = 280420;
+INSERT INTO `creature_formations` (`leaderGUID`, `memberGUID`, `dist`, `angle`, `groupAI`) VALUES
+(280420, 280420, 0, 0, 512),
+(280420, 280419, 2, 270, 512);
 
 DELETE FROM `vehicle_template_accessory` WHERE `entry` = 42399;
 INSERT INTO `vehicle_template_accessory` (`entry`, `accessory_entry`, `seat_id`, `minion`, `description`, `summontype`, `summontimer`) VALUES 
@@ -67,20 +75,23 @@ INSERT INTO `vehicle_template_accessory` (`entry`, `accessory_entry`, `seat_id`,
 (42399, 42401, 2, 1, 'Hobo Cart - Hobo Goods (Bag)', 8, 0),
 (42399, 42402, 3, 1, 'Hobo Cart - Hobo Goods (Poop)', 8, 0);
 
-DELETE FROM `creature_text` WHERE `CreatureID` = 42383 AND `GroupID` IN (11, 12, 13, 14, 15);
+DELETE FROM `creature_text` WHERE `CreatureID` = 42383 AND `GroupID` IN (11, 12, 13, 14, 15, 16);
 INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Language`, `Probability`, `Emote`, `Duration`, `Sound`, `BroadcastTextId`, `comment`) VALUES
 (42383, 11, 0, 'What the hell happened here?', 12, 7, 100, 1, 0, 0, 42318, 'Transient'),
 (42383, 12, 0, 'What\'s happened to us? We\'re in worse shape now than when the Defias ran amok!', 12, 7, 100, 6, 0, 0, 42321, 'Transient'),
 (42383, 13, 0, 'Let\'s get out of here before they try and pin this on us.', 12, 7, 100, 1, 0, 0, 42323, 'Transient'),
 (42383, 14, 0, 'We\'re just trying to get a decent meal and maybe a comfortable night\'s sleep.', 12, 7, 100, 0, 0, 0, 42342, 'Transient to Transient'),
-(42383, 15, 0, 'Let\'s get the hell out of here. I hope this place burns to the ground.', 12, 7, 100, 396, 0, 0, 42348, 'Transient to Transient');
+(42383, 15, 0, 'Dirty, rotten pig-lickers. You\'ll get your come-uppance some day.', 12, 7, 100, 396, 0, 0, 42347, 'Transient to Transient'),
+(42383, 16, 0, 'Let\'s get the hell out of here. I hope this place burns to the ground.', 12, 7, 100, 396, 0, 0, 42348, 'Transient to Transient');
 
 DELETE FROM `creature_text` WHERE `CreatureID` = 42400;
 INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Language`, `Probability`, `Emote`, `Duration`, `Sound`, `BroadcastTextId`, `comment`) VALUES
 (42400, 0, 0, 'Looks like the Furlbrow\'s were murdered...', 12, 7, 100, 396, 0, 0, 42320, 'West Plains Drifter'),
 (42400, 1, 0, 'Yep. That King Varian is good for nothin\'.', 12, 7, 100, 396, 0, 0, 42322, 'West Plains Drifter'),
 (42400, 2, 0, 'Good call.', 12, 7, 100, 396, 0, 0, 42324, 'West Plains Drifter'),
-(42400, 3, 0, 'Dirty, rotten pig-lickers. You\'ll get your come-uppance some day.', 12, 7, 100, 396, 0, 0, 42347, 'West Plains Drifter to Transient');
+(42400, 3, 0, 'We\'re just trying to get a decent meal and maybe a comfortable night\'s sleep.', 12, 7, 100, 0, 0, 0, 42342, 'West Plains Drifter to Transient'),
+(42400, 4, 0, 'Dirty, rotten pig-lickers. You\'ll get your come-uppance some day.', 12, 7, 100, 396, 0, 0, 42347, 'West Plains Drifter to Transient'),
+(42400, 5, 0, 'Let\'s get the hell out of here. I hope this place burns to the ground.', 12, 7, 100, 396, 0, 0, 42348, 'West Plains Drifter to Transient');
 
 DELETE FROM `creature_text` WHERE `CreatureID` = 42407;
 INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Language`, `Probability`, `Emote`, `Duration`, `Sound`, `BroadcastTextId`, `comment`) VALUES
@@ -88,3 +99,7 @@ INSERT INTO `creature_text` (`CreatureID`, `GroupID`, `ID`, `Text`, `Type`, `Lan
 (42407, 1, 0, 'Where do you think you two are going?', 12, 7, 100, 0, 0, 0, 42341, 'Sentinel Hill Guard to Transient'),
 (42407, 2, 0, 'Can\'t you read, pal? Probably not, huh?', 12, 7, 100, 0, 0, 0, 42344, 'Sentinel Hill Guard to Transient'),
 (42407, 3, 0, 'The sign here says: \"ABSOLUTELY NO BUMS!\" Now get lost!', 12, 7, 100, 1, 0, 0, 42345, 'Sentinel Hill Guard to Transient');
+
+DELETE FROM `smart_scripts` WHERE `entryorguid` = 42407;
+UPDATE `creature_template` SET `AIName`='' WHERE  `entry`=42407;
+UPDATE `creature_template` SET `ScriptName`='npc_westfall_sentinel_hill_guard' WHERE  `entry`=42407;
