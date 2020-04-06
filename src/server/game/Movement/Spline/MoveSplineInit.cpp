@@ -236,10 +236,15 @@ namespace Movement
 
     void MoveSplineInit::MoveTo(Vector3 const& dest, bool generatePath, bool forceDestination)
     {
+        MoveTo(G3D::Vector3(unit->GetPositionX(), unit->GetPositionY(), unit->GetPositionZ()), dest, generatePath, forceDestination);
+    }
+
+    void MoveSplineInit::MoveTo(Vector3 const& start, Vector3 const& destination, bool generatePath /*=true*/, bool forceDestination /*= false*/)
+    {
         if (generatePath)
         {
             PathGenerator path(unit);
-            bool result = path.CalculatePath(dest.x, dest.y, dest.z, forceDestination);
+            bool result = path.CalculatePath(start, destination, forceDestination);
             if (result && !(path.GetPathType() & PATHFIND_NOPATH))
             {
                 MovebyPath(path.GetPath());
@@ -250,7 +255,7 @@ namespace Movement
         args.path_Idx_offset = 0;
         args.path.resize(2);
         TransportPathTransform transform(unit, args.TransformForTransport);
-        args.path[1] = transform(dest);
+        args.path[1] = transform(destination);
     }
 
     void MoveSplineInit::SetFall()

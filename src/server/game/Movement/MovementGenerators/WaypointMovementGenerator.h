@@ -72,6 +72,7 @@ class WaypointMovementGenerator<Creature> : public MovementGeneratorMedium<Creat
         bool _loadedFromDB;
         bool _stalled;
         bool _done;
+        int32 _transitionDurationIndex;
 };
 
 #endif

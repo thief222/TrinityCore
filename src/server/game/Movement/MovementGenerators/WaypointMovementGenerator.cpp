@@ -18,6 +18,7 @@
 #include "WaypointMovementGenerator.h"
 #include "Creature.h"
 #include "CreatureAI.h"
+#include "G3DPosition.hpp"
 #include "Log.h"
 #include "Map.h"
 #include "MoveSpline.h"
@@ -27,12 +28,12 @@
 #include "WaypointManager.h"
 
 WaypointMovementGenerator<Creature>::WaypointMovementGenerator(uint32 pathId, bool repeating) : _nextMoveTime(0), _recalculateSpeed(false), _isArrivalDone(false), _pathId(pathId),
-_repeating(repeating), _loadedFromDB(true), _stalled(false), _done(false)
+_repeating(repeating), _loadedFromDB(true), _stalled(false), _done(false), _transitionDurationIndex(0)
 {
 }
 
 WaypointMovementGenerator<Creature>::WaypointMovementGenerator(WaypointPath& path, bool repeating) : _nextMoveTime(0), _recalculateSpeed(false), _isArrivalDone(false), _pathId(0),
-_repeating(repeating), _loadedFromDB(false), _stalled(false), _done(false)
+_repeating(repeating), _loadedFromDB(false), _stalled(false), _done(false), _transitionDurationIndex(0)
 {
     _path = &path;
 }
@@ -185,13 +186,56 @@ void WaypointMovementGenerator<Creature>::StartMove(Creature* creature, bool rel
     if (transportPath)
         init.DisableTransportPathTransformations();
 
-    //! Do not use formationDest here, MoveTo requires transport offsets due to DisableTransportPathTransformations() call
-    //! but formationDest contains global coordinates
-    init.MoveTo(waypoint.x, waypoint.y, waypoint.z);
 
     //! Accepts angles such as 0.00001 and -0.00001, 0 must be ignored, default value in waypoint table
     if (waypoint.orientation && waypoint.delay)
         init.SetFacing(waypoint.orientation);
+
+    // Used for smooth transition calculation later
+    float distance = 0.f;
+    _transitionDurationIndex = 0;
+
+    // Smooth waypoint handling
+    if (waypoint.orientation == 0.f && !waypoint.delay)
+    {
+       // uint32 nextNode = (_currentNode + 1) % _path->nodes.size();
+        //if ((nextNode < _currentNode && _repeating) || nextNode > _currentNode)
+        {
+            // Step one: pick up the destination of our previous spline and set it as out first spline point
+            G3D::Vector3 currentDestination = creature->movespline->Finalized() ? PositionToVector3(creature->GetPosition()) : creature->movespline->FinalDestination();
+            init.MoveTo(currentDestination, G3D::Vector3(waypoint.x, waypoint.y, waypoint.z));
+
+            Movement::PointsArray path = init.Path();
+
+            // We have a path. If we are transitioning from one spline to another, we need a new starting vertex now.
+            if (!creature->movespline->Finalized())
+                path.insert(path.begin(), PositionToVector3(creature->GetPosition()));
+
+            // Base path is set up, now we have to calculate our packet destination
+            Position dest = Vector3ToPosition(path.back());
+            Position prevPoint = Vector3ToPosition(path.at(path.size() - 2)); // at this point, we should always have at least two spline points so no need to do safety checks
+            distance = prevPoint.GetExactDist(dest);
+            if (distance < 4.f) // default spline point distance
+                distance = 4.f - distance; // remaining distance to travel
+
+            // Move the destination to our expected packet destination
+            prevPoint.SetOrientation(creature->GetOrientation());
+            float relativeAngle = prevPoint.GetRelativeAngle(dest);
+            creature->MovePositionToFirstCollision(dest, distance, relativeAngle);
+
+            // Store our actually traveled distance (early collision etc)
+            distance = std::min<float>(4.f, Vector3ToPosition(path.back()).GetExactDist(dest));
+            path.back() = PositionToVector3(dest);
+
+            // Altered path calculation done, use it.
+            init.Path() = path;
+        }
+    }
+    else
+    {
+        // Regular movement handling
+        init.MoveTo(waypoint.x, waypoint.y, waypoint.z);
+    }
 
     switch (waypoint.moveType)
     {
@@ -211,7 +255,15 @@ void WaypointMovementGenerator<Creature>::StartMove(Creature* creature, bool rel
             break;
     }
 
-    init.Launch();
+    int32 duration = init.Launch();
+
+    if (distance > 0.f && !creature->movespline->Finalized())
+    {
+        // Smooth waypoint has been launched. We now determine our transition timestamp
+        float velocity = creature->movespline->Velocity();
+        uint32 transitionOffset = IN_MILLISECONDS *  (distance / velocity);
+        _transitionDurationIndex = duration - transitionOffset;
+    }
 
     // inform formation
     creature->SignalFormationMovement();
@@ -234,7 +286,13 @@ bool WaypointMovementGenerator<Creature>::DoUpdate(Creature* creature, uint32 di
     }
 
     // if it's moving
-    if (!creature->movespline->Finalized())
+    bool isMoving = !creature->movespline->Finalized();
+
+    // smooth waypoint transition
+    if (isMoving && _transitionDurationIndex)
+        isMoving = creature->movespline->TimePassed() < _transitionDurationIndex;
+
+    if (isMoving)
     {
         // set home position at place (every MotionMaster::UpdateMotion)
         if (creature->GetTransGUID().IsEmpty())

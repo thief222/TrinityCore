@@ -59,17 +59,18 @@ bool PathGenerator::CalculatePath(float destX, float destY, float destZ, bool fo
 {
     float x, y, z;
     _source->GetPosition(x, y, z);
+    return CalculatePath(G3D::Vector3(x, y, z), G3D::Vector3(destX, destY, destZ), forceDest, straightLine);
+}
 
-    if (!Trinity::IsValidMapCoord(destX, destY, destZ) || !Trinity::IsValidMapCoord(x, y, z))
+bool PathGenerator::CalculatePath(G3D::Vector3 const& start, G3D::Vector3 const& dest, bool forceDest /*= false*/, bool straightLine /*= false*/)
+{
+    if (!Trinity::IsValidMapCoord(dest.x, dest.y, dest.z) || !Trinity::IsValidMapCoord(start.x, start.y, start.z))
         return false;
 
     TC_METRIC_EVENT("mmap_events", "CalculatePath", "");
 
-    G3D::Vector3 dest(destX, destY, destZ);
-    SetEndPosition(dest);
-
-    G3D::Vector3 start(x, y, z);
     SetStartPosition(start);
+    SetEndPosition(dest);
 
     _forceDestination = forceDest;
     _straightLine = straightLine;

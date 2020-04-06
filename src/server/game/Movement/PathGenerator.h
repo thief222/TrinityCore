@@ -60,6 +60,7 @@ class TC_GAME_API PathGenerator
         // Calculate the path from owner to given destination
         // return: true if new path was calculated, false otherwise (no change needed)
         bool CalculatePath(float destX, float destY, float destZ, bool forceDest = false, bool straightLine = false);
+        bool CalculatePath(G3D::Vector3 const& start, G3D::Vector3 const& dest, bool forceDest = false, bool straightLine = false);
         bool IsInvalidDestinationZ(Unit const* target) const;
 
         // option setters - use optional
